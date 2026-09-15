@@ -32,10 +32,23 @@ def _download_video_sync(url: str) -> Dict[str, Any]:
         'no_warnings': True,
         'merge_output_format': 'mp4',
         'max_filesize': MAX_BYTES,
+        # Обход защиты YouTube: притворяемся мобильным приложением iOS/Android
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'android', 'mweb']
+            }
+        },
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+            'User-Agent': (
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) '
+                'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+            )
         }
     }
+
+    # Если загружен файл cookies.txt, бот автоматически использует его
+    if os.path.isfile("cookies.txt"):
+        ydl_opts['cookiefile'] = "cookies.txt"
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
