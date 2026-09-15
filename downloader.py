@@ -20,15 +20,21 @@ def _download_video_sync(url: str) -> Dict[str, Any]:
 
     unique_id = str(uuid.uuid4())[:8]
     output_template = os.path.join(DOWNLOAD_DIR, f"{unique_id}_%(id)s.%(ext)s")
-    
+    cookie_file = "cookies.txt" if os.path.isfile("cookies.txt") else None
+
+    # Опции без конфликтующего mweb
     ydl_opts = {
-        # Универсальный выбор лучшего формата (MP4) без сбоев
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/bestvideo+bestaudio/best',
         'outtmpl': output_template,
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
         'merge_output_format': 'mp4',
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web']
+            }
+        },
         'http_headers': {
             'User-Agent': (
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
@@ -37,9 +43,8 @@ def _download_video_sync(url: str) -> Dict[str, Any]:
         }
     }
 
-    # Подключение куков
-    if os.path.isfile("cookies.txt"):
-        ydl_opts['cookiefile'] = "cookies.txt"
+    if cookie_file:
+        ydl_opts['cookiefile'] = cookie_file
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -73,7 +78,6 @@ def _download_video_sync(url: str) -> Dict[str, Any]:
                 return {"success": False, "error": "Файл не сохранился."}
 
             filesize = os.path.getsize(filepath)
-            # Проверка лимита Telegram (50 MB)
             if filesize > MAX_BYTES:
                 try:
                     os.remove(filepath)
@@ -95,6 +99,50 @@ def _download_video_sync(url: str) -> Dict[str, Any]:
             }
     except Exception as e:
         err = str(e)
+        # Запасной вариант через чистый клиент android
+        try:
+            ydl_opts_fallback = {
+                'format': 'best[ext=mp4]/best',
+                'outtmpl': output_template,
+                'noplaylist': True,
+                'quiet': True,
+                'no_warnings': True,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android']
+                    }
+                }
+            }
+            if cookie_file:
+                ydl_opts_fallback['cookiefile'] = cookie_file
+
+            with yt_dlp.YoutubeDL(ydl_opts_fallback) as ydl_fb:
+                info = ydl_fb.extract_info(url, download=True)
+                if info and "entries" in info:
+                    entries = list(info["entries"])
+                    if entries:
+                        info = entries[0]
+                filename = ydl_fb.prepare_filename(info)
+                base, _ = os.path.splitext(filename)
+                for candidate in [filename, f"{base}.mp4", f"{base}.mkv", f"{base}.webm"]:
+                    if os.path.isfile(candidate):
+                        filepath = candidate
+                        break
+                if filepath and os.path.isfile(filepath):
+                    filesize = os.path.getsize(filepath)
+                    if filesize <= MAX_BYTES:
+                        return {
+                            "success": True,
+                            "filepath": filepath,
+                            "title": info.get("title", "Sadix MS Video"),
+                            "duration": info.get("duration", 0),
+                            "width": info.get("width"),
+                            "height": info.get("height"),
+                            "filesize": filesize
+                        }
+        except Exception:
+            pass
+
         return {"success": False, "error": f"Ошибка скачивания: {err.split(';')[0]}"}
 
 async def download_video(url: str, timeout: int = 180) -> Dict[str, Any]:
