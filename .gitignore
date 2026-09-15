@@ -1,0 +1,11 @@
+cookies.txt
+*.session
+__pycache__/
+*.pyc
+*.pyo
+.env
+downloads/
+*.db
+*.sqlite3
+.venv/
+venv/
