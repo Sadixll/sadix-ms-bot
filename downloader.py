@@ -22,31 +22,22 @@ def _download_video_sync(url: str) -> Dict[str, Any]:
     output_template = os.path.join(DOWNLOAD_DIR, f"{unique_id}_%(id)s.%(ext)s")
     
     ydl_opts = {
-        'format': (
-            'bestvideo[ext=mp4][filesize<=45M]+bestaudio[ext=m4a]/best[ext=mp4][filesize<=48M]/'
-            'bestvideo[filesize<=45M]+bestaudio/best[filesize<=48M]/best'
-        ),
+        # Универсальный выбор лучшего формата (MP4) без сбоев
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/bestvideo+bestaudio/best',
         'outtmpl': output_template,
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
         'merge_output_format': 'mp4',
-        'max_filesize': MAX_BYTES,
-        # Обход защиты YouTube: притворяемся мобильным приложением iOS/Android
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['ios', 'android', 'mweb']
-            }
-        },
         'http_headers': {
             'User-Agent': (
-                'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) '
-                'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
             )
         }
     }
 
-    # Если загружен файл cookies.txt, бот автоматически использует его
+    # Подключение куков
     if os.path.isfile("cookies.txt"):
         ydl_opts['cookiefile'] = "cookies.txt"
 
@@ -82,12 +73,16 @@ def _download_video_sync(url: str) -> Dict[str, Any]:
                 return {"success": False, "error": "Файл не сохранился."}
 
             filesize = os.path.getsize(filepath)
+            # Проверка лимита Telegram (50 MB)
             if filesize > MAX_BYTES:
                 try:
                     os.remove(filepath)
                 except OSError:
                     pass
-                return {"success": False, "error": f"Размер ({filesize / (1024*1024):.1f} МБ) превышает лимит Telegram (50 МБ)."}
+                return {
+                    "success": False, 
+                    "error": f"Размер видео ({filesize / (1024*1024):.1f} МБ) превышает лимит Telegram (50 МБ)."
+                }
 
             return {
                 "success": True,
@@ -100,8 +95,6 @@ def _download_video_sync(url: str) -> Dict[str, Any]:
             }
     except Exception as e:
         err = str(e)
-        if "larger than max-filesize" in err:
-            return {"success": False, "error": "Файл превышает допустимый размер (50 МБ)."}
         return {"success": False, "error": f"Ошибка скачивания: {err.split(';')[0]}"}
 
 async def download_video(url: str, timeout: int = 180) -> Dict[str, Any]:
